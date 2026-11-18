@@ -1,0 +1,577 @@
+
+import * as THREE from 'three';
+
+// ==========================================
+// ASMR WORLDS — MUSHROOM v0.9
+// Original mushroom + REAL wet sponge Foley
+// ==========================================
+
+// SCENE
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#e9e5db');
+
+const camera = new THREE.PerspectiveCamera(
+  40,
+  window.innerWidth / window.innerHeight,
+  0.1,
+  100
+);
+camera.position.set(0, 3.6, 6.5);
+camera.lookAt(0, 0.85, 0);
+
+// RENDERER
+const renderer = new THREE.WebGLRenderer({
+  antialias: true
+});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.domElement.style.touchAction = 'none';
+document.querySelector('#app').replaceChildren(renderer.domElement);
+
+// LIGHTING
+scene.add(new THREE.HemisphereLight('#fff8f0', '#82947b', 2));
+const light = new THREE.DirectionalLight('#fff5ec', 2.5);
+light.position.set(-3, 6, 5);
+scene.add(light);
+
+// SHORT CREAM STEM
+const stem = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.29, 0.38, 0.65, 48),
+  new THREE.MeshStandardMaterial({
+    color: '#f5e8d5',
+    roughness: 0.9
+  })
+);
+stem.position.y = 0.325;
+scene.add(stem);
+
+// ORIGINAL MUSHROOM CAP
+const profile = [
+  [0.00, 0.08],
+  [0.20, 0.09],
+  [0.43, 0.10],
+  [0.68, 0.08],
+  [0.90, 0.08],
+  [1.08, 0.15],
+  [1.17, 0.28],
+  [1.18, 0.42],
+  [1.13, 0.57],
+  [1.02, 0.72],
+  [0.84, 0.85],
+  [0.61, 0.95],
+  [0.33, 1.02],
+  [0.00, 1.05]
+];
+
+const curve = new THREE.SplineCurve(
+  profile.map(([r, y]) => new THREE.Vector2(r, y))
+);
+const capGeometry = new THREE.LatheGeometry(
+  curve.getPoints(72), 96
+);
+capGeometry.computeVertexNormals();
+
+// ORIGINAL CRISP WHITE SPOTS
+const textureCanvas = document.createElement('canvas');
+textureCanvas.width = 1024;
+textureCanvas.height = 1024;
+
+const ctx = textureCanvas.getContext('2d');
+const W = textureCanvas.width;
+const H = textureCanvas.height;
+
+ctx.fillStyle = '#df403b';
+ctx.fillRect(0, 0, W, H);
+
+function drawSpot(u, v, width, height, rotation = 0) {
+  const x = u * W;
+  const y = (1 - v) * H;
+
+  for (const shift of [-W, 0, W]) {
+    ctx.save();
+    ctx.translate(x + shift, y);
+    ctx.rotate(rotation);
+    ctx.beginPath();
+    ctx.ellipse(
+      0, 0,
+      width * W, height * H,
+      0, 0, Math.PI * 2
+    );
+    ctx.fillStyle = '#fff4df';
+    ctx.fill();
+    ctx.restore();
+  }
+}
+
+const spotLayout = [
+  [0.12, 0.86, 0.030, 0.022, 0.3],
+  [0.28, 0.88, 0.038, 0.026, -0.2],
+  [0.46, 0.84, 0.034, 0.024, 0.5],
+  [0.64, 0.87, 0.032, 0.022, -0.4],
+  [0.83, 0.85, 0.037, 0.025, 0.2],
+  [0.05, 0.75, 0.029, 0.020, 0.1],
+  [0.21, 0.77, 0.040, 0.027, -0.3],
+  [0.39, 0.73, 0.034, 0.024, 0.4],
+  [0.57, 0.77, 0.041, 0.028, -0.2],
+  [0.76, 0.74, 0.032, 0.022, 0.3],
+  [0.94, 0.77, 0.036, 0.024, -0.1],
+  [0.13, 0.66, 0.026, 0.018, 0.2],
+  [0.31, 0.64, 0.033, 0.022, -0.3],
+  [0.51, 0.67, 0.028, 0.020, 0.4],
+  [0.70, 0.63, 0.035, 0.022, -0.2],
+  [0.89, 0.66, 0.029, 0.020, 0.1],
+  [0.20, 0.94, 0.018, 0.015, 0],
+  [0.53, 0.94, 0.020, 0.016, 0],
+  [0.79, 0.93, 0.018, 0.014, 0]
+];
+spotLayout.forEach(spot => drawSpot(...spot));
+
+const capTexture = new THREE.CanvasTexture(textureCanvas);
+capTexture.colorSpace = THREE.SRGBColorSpace;
+capTexture.wrapS = THREE.RepeatWrapping;
+capTexture.wrapT = THREE.ClampToEdgeWrapping;
+capTexture.anisotropy = Math.min(
+  8, renderer.capabilities.getMaxAnisotropy()
+);
+
+const cap = new THREE.Mesh(
+  capGeometry,
+  new THREE.MeshStandardMaterial({
+    map: capTexture,
+    roughness: 0.62,
+    metalness: 0,
+    side: THREE.DoubleSide
+  })
+);
+cap.position.y = 0.56;
+scene.add(cap);
+
+// GROUND
+const ground = new THREE.Mesh(
+  new THREE.CylinderGeometry(2.2, 2.4, 0.25, 64),
+  new THREE.MeshStandardMaterial({
+    color: '#91a785',
+    roughness: 1
+  })
+);
+ground.position.y = -0.15;
+scene.add(ground);
+
+// ==========================================
+// v0.9 REAL WET SPONGE AUDIO
+// ==========================================
+
+// Audio is loaded from public/wet-sponge.mp3.
+// We play short slices of the recording.
+// All audio is real Foley, not synthesized.
+
+let audioContext = null;
+let spongeBuffer = null;
+let audioPromise = null;
+let masterGain = null;
+let lastDragSound = 0;
+
+const SOUND_VOLUME = 0.75;
+
+// Candidate sections from the 30.7-second file.
+// We can refine the exact timings after listening
+// to how these clips behave in the game.
+
+const soundClips = {
+  press: [
+    { start: 10.2, duration: 0.42 },
+    { start: 11.0, duration: 0.38 },
+    { start: 20.2, duration: 0.45 }
+  ],
+  drag: [
+    { start: 10.8, duration: 0.27 },
+    { start: 21.0, duration: 0.30 },
+    { start: 22.0, duration: 0.26 }
+  ],
+  release: [
+    { start: 11.5, duration: 0.30 },
+    { start: 20.9, duration: 0.32 },
+    { start: 22.5, duration: 0.35 }
+  ]
+};
+
+async function initAudio() {
+  if (!audioContext) {
+    const AudioContextClass =
+      window.AudioContext || window.webkitAudioContext;
+
+    if (!AudioContextClass) {
+      console.warn('Web Audio is not supported.');
+      return;
+    }
+
+    audioContext = new AudioContextClass();
+
+    masterGain = audioContext.createGain();
+    masterGain.gain.value = SOUND_VOLUME;
+    masterGain.connect(audioContext.destination);
+  }
+
+  if (audioContext.state === 'suspended') {
+    await audioContext.resume();
+  }
+
+  if (!audioPromise) {
+    audioPromise = (async () => {
+      const response = await fetch('/wet-sponge.mp3');
+
+      if (!response.ok) {
+        throw new Error(
+          'Could not load wet-sponge.mp3. Check the public folder.'
+        );
+      }
+
+      const bytes = await response.arrayBuffer();
+      spongeBuffer = await audioContext.decodeAudioData(bytes);
+
+      console.log(
+        'Wet sponge audio loaded:',
+        spongeBuffer.duration.toFixed(2),
+        'seconds'
+      );
+    })().catch(error => {
+      audioPromise = null;
+      console.error('Mushroom audio error:', error);
+    });
+  }
+
+  await audioPromise;
+}
+
+function chooseClip(type) {
+  const options = soundClips[type];
+
+  return options[
+    Math.floor(Math.random() * options.length)
+  ];
+}
+
+function playSponge(type = 'press') {
+  if (
+    !audioContext ||
+    !spongeBuffer ||
+    audioContext.state !== 'running'
+  ) return;
+
+  const clip = chooseClip(type);
+  const now = audioContext.currentTime;
+
+  const start = Math.min(
+    clip.start,
+    spongeBuffer.duration - 0.05
+  );
+
+  const duration = Math.min(
+    clip.duration,
+    spongeBuffer.duration - start
+  );
+
+  if (duration <= 0.02) return;
+
+  const source = audioContext.createBufferSource();
+  source.buffer = spongeBuffer;
+
+  // Tiny pitch variations make repeat presses
+  // feel less identical.
+  source.playbackRate.value =
+    0.94 + Math.random() * 0.12;
+
+  const filter = audioContext.createBiquadFilter();
+  filter.type = 'highpass';
+  filter.frequency.value = 100;
+
+  const gain = audioContext.createGain();
+
+  const volume =
+    type === 'press' ? 0.9 :
+    type === 'drag' ? 0.55 : 0.7;
+
+  // Smooth fade-in and fade-out prevent clicks.
+  const fadeIn = Math.min(0.018, duration * 0.2);
+  const fadeOut = Math.min(0.075, duration * 0.3);
+
+  gain.gain.setValueAtTime(0, now);
+  gain.gain.linearRampToValueAtTime(
+    volume, now + fadeIn
+  );
+
+  gain.gain.setValueAtTime(
+    volume,
+    now + Math.max(fadeIn, duration - fadeOut)
+  );
+
+  gain.gain.linearRampToValueAtTime(
+    0,
+    now + duration
+  );
+
+  source.connect(filter);
+  filter.connect(gain);
+  gain.connect(masterGain);
+
+  source.start(now, start, duration);
+  source.stop(now + duration + 0.02);
+
+  source.onended = () => {
+    source.disconnect();
+    filter.disconnect();
+    gain.disconnect();
+  };
+}
+
+// ==========================================
+// ORIGINAL LOCALIZED SQUISH PHYSICS
+// ==========================================
+
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+
+const positions = capGeometry.attributes.position;
+const originals = new Float32Array(positions.array);
+const offsets = new Float32Array(positions.count);
+const velocities = new Float32Array(positions.count);
+
+let activePointer = null;
+let contact = null;
+let pressed = false;
+let pressure = 0;
+let holdSoundPlayed = false;
+let pressStartTime = 0;
+
+const radius = 0.46;
+const maxDepth = 0.32;
+
+function getContact(event) {
+  const rect =
+    renderer.domElement.getBoundingClientRect();
+
+  pointer.x =
+    ((event.clientX - rect.left) / rect.width) * 2 - 1;
+
+  pointer.y =
+    -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+  raycaster.setFromCamera(pointer, camera);
+
+  const hits = raycaster.intersectObject(cap);
+  if (!hits.length) return null;
+
+  const point = hits[0].point.clone();
+  cap.worldToLocal(point);
+
+  return point;
+}
+
+// PRESS
+renderer.domElement.addEventListener(
+  'pointerdown',
+  (event) => {
+    if (activePointer !== null) return;
+
+    const point = getContact(event);
+    if (!point) return;
+
+    activePointer = event.pointerId;
+    contact = point;
+    pressed = true;
+    pressure = 0;
+    holdSoundPlayed = false;
+    pressStartTime = performance.now();
+
+    renderer.domElement.setPointerCapture(
+      event.pointerId
+    );
+
+    // Audio loads on first interaction.
+    // Subsequent presses play immediately.
+    if (spongeBuffer) {
+      playSponge('press');
+    } else {
+      initAudio().then(() => {
+        if (pressed) playSponge('press');
+      });
+    }
+  }
+);
+
+// DRAG
+renderer.domElement.addEventListener(
+  'pointermove',
+  (event) => {
+    if (
+      event.pointerId !== activePointer ||
+      !pressed
+    ) return;
+
+    const point = getContact(event);
+
+    if (point) {
+      const distance = contact
+        ? point.distanceTo(contact)
+        : 0;
+
+      contact = point;
+
+      const now = performance.now();
+
+      // Only play a drag sound for meaningful
+      // movement, avoiding constant overlapping.
+      if (
+        distance > 0.045 &&
+        now - lastDragSound > 190
+      ) {
+        playSponge('drag');
+        lastDragSound = now;
+      }
+    }
+  }
+);
+
+// RELEASE
+function release(event) {
+  if (event.pointerId !== activePointer) return;
+
+  pressed = false;
+  activePointer = null;
+
+  playSponge('release');
+}
+
+renderer.domElement.addEventListener(
+  'pointerup', release
+);
+renderer.domElement.addEventListener(
+  'pointercancel', release
+);
+
+window.addEventListener('blur', () => {
+  pressed = false;
+  activePointer = null;
+});
+
+// SPRING PHYSICS
+const clock = new THREE.Clock();
+
+function updateSquish(delta) {
+  const dt = Math.min(delta, 0.033);
+
+  pressure +=
+    ((pressed ? 1 : 0) - pressure) *
+    Math.min(1, dt * 10);
+
+  // One subtle compression sound during a hold.
+  if (
+    pressed &&
+    !holdSoundPlayed &&
+    performance.now() - pressStartTime > 250
+  ) {
+    playSponge('drag');
+    holdSoundPlayed = true;
+  }
+
+  const stiffness = 145;
+  const damping = 15;
+
+  let moving = false;
+
+  for (let i = 0; i < positions.count; i++) {
+    const j = i * 3;
+
+    const x = originals[j];
+    const y = originals[j + 1];
+    const z = originals[j + 2];
+
+    let target = 0;
+
+    if (contact && pressure > 0.001) {
+      const dx = x - contact.x;
+      const dy = y - contact.y;
+      const dz = z - contact.z;
+
+      const d2 =
+        dx * dx +
+        dy * dy +
+        dz * dz;
+
+      const influence = Math.exp(
+        -d2 / (radius * radius)
+      );
+
+      const d = Math.sqrt(d2);
+
+      const bulge = Math.exp(
+        -Math.pow(
+          (d - radius * 1.45) /
+          (radius * 0.42),
+          2
+        )
+      ) * 0.035;
+
+      target =
+        -maxDepth * pressure * influence +
+        bulge * pressure;
+    }
+
+    const acceleration =
+      (target - offsets[i]) * stiffness -
+      velocities[i] * damping;
+
+    velocities[i] += acceleration * dt;
+    offsets[i] += velocities[i] * dt;
+
+    offsets[i] = THREE.MathUtils.clamp(
+      offsets[i],
+      -0.42,
+      0.12
+    );
+
+    positions.setXYZ(
+      i,
+      x,
+      y + offsets[i],
+      z
+    );
+
+    if (
+      Math.abs(offsets[i]) > 0.0002 ||
+      Math.abs(velocities[i]) > 0.0002
+    ) {
+      moving = true;
+    }
+  }
+
+  if (moving || pressed) {
+    positions.needsUpdate = true;
+    capGeometry.computeVertexNormals();
+  }
+}
+
+// ANIMATION
+function animate() {
+  requestAnimationFrame(animate);
+
+  updateSquish(clock.getDelta());
+
+  renderer.render(scene, camera);
+}
+
+// RESIZE
+window.addEventListener('resize', () => {
+  camera.aspect =
+    window.innerWidth / window.innerHeight;
+
+  camera.updateProjectionMatrix();
+
+  renderer.setSize(
+    window.innerWidth,
+    window.innerHeight
+  );
+});
+
+animate();
